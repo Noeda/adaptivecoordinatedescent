@@ -99,11 +99,29 @@ minus tr1 tr2 = flip evalState (toList tr2) $ for tr1 $ \item -> do
   put rest
   return $ item - x
 
+-- | Performs adaptive coordinate descent.
 adaptiveCoordinateDescent :: (MonadIO m, Traversable f, Eq (f Double))
-                          => (f Double -> m Double)
-                          -> f Double
+                          => (f Double -> m Double)  -- ^ Cost function. Smaller cost = better model.
+                          -> f Double                -- ^ Initial parameters from which to start optimization.
+                          -> Double                  -- ^ Tolerance on how small changes are allowed.
+                                                     --   If no changes larger
+                                                     --   than this value are
+                                                     --   found, then this
+                                                     --   descent function
+                                                     --   returns. You probably
+                                                     --   want something small
+                                                     --   like 0.0000001
+                          -> Int                     -- ^ How many best N candidates to keep for PCA phase.
+                                                     --   Good values are
+                                                     --   probably around the
+                                                     --   size of number of
+                                                     --   your parameters.
+                                                     --   Maybe more if you
+                                                     --   only have like 2
+                                                     --   parameters. Probably.
+                                                     --   We don't know.
                           -> Producer (f Double, Double) m (f Double, Double)
-adaptiveCoordinateDescent evaluate initial_params = do
+adaptiveCoordinateDescent evaluate initial_params tolerance how_many_to_keep = do
   score <- lift $ evaluate initial_params
   yield (initial_params, score)
 
@@ -119,7 +137,7 @@ adaptiveCoordinateDescent evaluate initial_params = do
     loop_it original_params params score principal_components scored_items step_sizes new_step_sizes
 
   loop_it original_params params score (principal_component:principal_components) last_n_params (step_size':step_sizes) new_step_sizes = do
-    let step_size = max 0.000001 step_size'
+    let step_size = max tolerance step_size'
         scaled_pcomponent = cmap (*step_size) principal_component
         top_candidate    = params `plus` fromVector scaled_pcomponent initial_params
         bottom_candidate = params `minus` fromVector scaled_pcomponent initial_params
@@ -138,11 +156,11 @@ adaptiveCoordinateDescent evaluate initial_params = do
 
   loop_it original_params params score [] _last_n_params _step_sizes new_step_sizes
     | original_params == params &&
-      all (\x -> x < 0.000001) new_step_sizes = yield (params, score) >> return (params, score)
+      all (\x -> x <= tolerance) new_step_sizes = yield (params, score) >> return (params, score)
   loop_it _original_params params score [] last_n_params _step_sizes new_step_sizes = do
     let num_coordinates = length (toList params)
         sorted_items = sortBy (comparing snd) last_n_params
-        picked_items = take 10 sorted_items
+        picked_items = take how_many_to_keep sorted_items
 
         items_mat = normalize $
                     ( (length picked_items><num_coordinates)
