@@ -64,12 +64,13 @@ adaptiveCoordinateDescent evaluate initial_params tolerance how_many_to_keep = d
     top_score    <- lift $ evaluate top_candidate
     bottom_score <- lift $ evaluate bottom_candidate
 
+    yield (top_candidate, top_score)
+    yield (bottom_candidate, bottom_score)
+
     if | top_score < score
-         -> do yield (top_candidate, top_score)
-               loop_it original_params top_candidate top_score principal_components ((top_candidate, top_score):last_n_params) step_sizes (step_size*k_succ:new_step_sizes)
+         -> loop_it original_params top_candidate top_score principal_components ((top_candidate, top_score):last_n_params) step_sizes (step_size*k_succ:new_step_sizes)
        | bottom_score < score
-         -> do yield (bottom_candidate, bottom_score)
-               loop_it original_params bottom_candidate bottom_score principal_components ((bottom_candidate, bottom_score):last_n_params) step_sizes (step_size*k_succ:new_step_sizes)
+         -> loop_it original_params bottom_candidate bottom_score principal_components ((bottom_candidate, bottom_score):last_n_params) step_sizes (step_size*k_succ:new_step_sizes)
        | otherwise
          -> loop_it original_params params score principal_components last_n_params step_sizes (step_size*k_unsucc:new_step_sizes)
 
